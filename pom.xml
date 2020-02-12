@@ -71,7 +71,7 @@ under the License.
     <doxia-sitetoolsVersion>1.7.4</doxia-sitetoolsVersion>
     <beanshell-groupId>org.beanshell</beanshell-groupId>
     <beanshell-artifactId>bsh</beanshell-artifactId>
-    <beanshell-version>2.0b4</beanshell-version>
+    <beanshell-version>2.0b5</beanshell-version>
     <groovy-groupId>org.codehaus.groovy</groovy-groupId>
     <groovy-artifactId>groovy-all</groovy-artifactId>
     <groovy-version>2.2.2</groovy-version> <!-- latest 1.6 compatible -->

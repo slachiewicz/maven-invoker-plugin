@@ -373,7 +373,6 @@ public class InvokerPropertiesTest
     @Test
     public void testGetToolchains()
     {
-
         Properties props = new Properties();
         props.put( "invoker.toolchain.jdk.version", "11" );
         InvokerProperties facade = new InvokerProperties( props );
@@ -382,24 +381,23 @@ public class InvokerPropertiesTest
         assertNotNull( toolchains );
         assertEquals( 1, toolchains.size() );
         InvokerToolchain toolchain = toolchains.iterator().next();
-        assertEquals( "jdk", toolchain.getType());
-        assertEquals( Collections.singletonMap( "version", "11" ), toolchain.getProvides());
+        assertEquals( "jdk", toolchain.getType() );
+        assertEquals( Collections.singletonMap( "version", "11" ), toolchain.getProvides() );
     }
 
     @Test
     public void testGetToolchainsWithIndex()
     {
-
         Properties props = new Properties();
         props.put( "selector.1.invoker.toolchain.jdk.version", "11" );
         InvokerProperties facade = new InvokerProperties( props );
 
-        Collection<InvokerToolchain> toolchains = facade.getToolchains(1);
+        Collection<InvokerToolchain> toolchains = facade.getToolchains( 1 );
         assertNotNull( toolchains );
         assertEquals( 1, toolchains.size() );
         InvokerToolchain toolchain = toolchains.iterator().next();
-        assertEquals( "jdk", toolchain.getType());
-        assertEquals( Collections.singletonMap( "version", "11" ), toolchain.getProvides());
+        assertEquals( "jdk", toolchain.getType() );
+        assertEquals( Collections.singletonMap( "version", "11" ), toolchain.getProvides() );
     }
 
 }

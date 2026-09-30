@@ -18,25 +18,16 @@
  */
 package org.apache.maven.plugins.invoker;
 
-import java.util.Properties;
+import java.util.Map;
 import java.util.stream.Stream;
 
-import org.apache.maven.project.MavenProject;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class InterpolatorUtilsTest {
-
-    @Mock
-    private MavenProject mavenProject;
 
     static Stream<Arguments> testAtInterpolate() {
         return Stream.of(
@@ -57,10 +48,7 @@ class InterpolatorUtilsTest {
     @MethodSource
     void testAtInterpolate(String input, String expected) throws Exception {
         // given
-        Properties properties = new Properties();
-        properties.put("test", "testInProps");
-        when(mavenProject.getProperties()).thenReturn(properties);
-        InterpolatorUtils interpolatorUtils = new InterpolatorUtils(mavenProject);
+        InterpolatorUtils interpolatorUtils = new InterpolatorUtils(Map.of("test", "testInProps"));
 
         // when
         String output = interpolatorUtils.interpolateAtPattern(input);

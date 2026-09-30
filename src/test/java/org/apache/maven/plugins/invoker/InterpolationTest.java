@@ -24,14 +24,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.maven.model.Scm;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.settings.Settings;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.model.Model;
+import org.apache.maven.api.model.Scm;
+import org.apache.maven.api.plugin.Log;
 import org.codehaus.plexus.util.IOUtil;
 import org.codehaus.plexus.util.xml.XmlStreamReader;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * @author Olivier Lamy
@@ -39,19 +41,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class InterpolationTest {
 
-    private MavenProject buildMavenProjectStub() {
-        MavenProject project = new MavenProject();
-        project.setVersion("1.0-SNAPSHOT");
-        project.setArtifactId("foo");
-        project.setGroupId("bar");
-        project.setFile(new File(TestUtil.getBasedir(), "pom.xml"));
-        Properties properties = new Properties();
-        properties.put("fooOnProject", "barOnProject");
-        project.getModel().setProperties(properties);
-        Scm scm = new Scm();
-        scm.setConnection("http://blabla");
-        project.setScm(scm);
-        return project;
+    private Project buildMavenProjectStub() {
+        Model model = Model.newBuilder()
+                .version("1.0-SNAPSHOT")
+                .artifactId("foo")
+                .groupId("bar")
+                .properties(Map.of("fooOnProject", "barOnProject"))
+                .scm(Scm.newBuilder().connection("http://blabla").build())
+                .build();
+        return TestUtil.project(model, new File(TestUtil.getBasedir(), "pom.xml").toPath());
     }
 
     @Test
@@ -69,9 +67,10 @@ class InterpolationTest {
 
     @Test
     void pomInterpolation() throws Exception {
-        InvokerMojo invokerMojo = new InvokerMojo(null, null, null, null);
+        InvokerMojo invokerMojo = new InvokerMojo();
         TestUtil.setVariableValueToObject(invokerMojo, "project", buildMavenProjectStub());
-        TestUtil.setVariableValueToObject(invokerMojo, "settings", new Settings());
+        TestUtil.setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
+        TestUtil.setVariableValueToObject(invokerMojo, "log", mock(Log.class));
         Properties properties = new Properties();
         properties.put("foo", "bar");
         properties.put("version", "2.0-SNAPSHOT");

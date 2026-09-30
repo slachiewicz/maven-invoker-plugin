@@ -18,59 +18,39 @@
  */
 package org.apache.maven.plugins.invoker;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.Collections;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import org.apache.maven.RepositoryUtils;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.model.DependencyManagement;
-import org.apache.maven.model.Model;
-import org.apache.maven.model.Parent;
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.artifact.ProjectArtifact;
-import org.eclipse.aether.DefaultRepositoryCache;
-import org.eclipse.aether.DefaultRepositorySystemSession;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.artifact.Artifact;
-import org.eclipse.aether.artifact.ArtifactType;
-import org.eclipse.aether.artifact.ArtifactTypeRegistry;
-import org.eclipse.aether.artifact.DefaultArtifact;
-import org.eclipse.aether.collection.CollectRequest;
-import org.eclipse.aether.graph.DefaultDependencyNode;
-import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.graph.DependencyFilter;
-import org.eclipse.aether.installation.InstallRequest;
-import org.eclipse.aether.installation.InstallationException;
-import org.eclipse.aether.repository.LocalRepository;
-import org.eclipse.aether.repository.LocalRepositoryManager;
-import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
-import org.eclipse.aether.resolution.ArtifactResult;
-import org.eclipse.aether.resolution.DependencyRequest;
-import org.eclipse.aether.resolution.DependencyResolutionException;
-import org.eclipse.aether.resolution.DependencyResult;
-import org.eclipse.aether.util.artifact.ArtifactIdUtils;
-import org.eclipse.aether.util.artifact.JavaScopes;
-import org.eclipse.aether.util.artifact.SubArtifact;
-import org.eclipse.aether.util.filter.DependencyFilterUtils;
+import org.apache.maven.api.Artifact;
+import org.apache.maven.api.DependencyCoordinates;
+import org.apache.maven.api.DownloadedArtifact;
+import org.apache.maven.api.PathScope;
+import org.apache.maven.api.ProducedArtifact;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.RemoteRepository;
+import org.apache.maven.api.Session;
+import org.apache.maven.api.Type;
+import org.apache.maven.api.di.Inject;
+import org.apache.maven.api.model.Model;
+import org.apache.maven.api.model.Parent;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
+import org.apache.maven.api.services.DependencyResolver;
+import org.apache.maven.api.services.DependencyResolverRequest;
+import org.apache.maven.api.services.DependencyResolverResult;
+import org.apache.maven.api.services.ProjectManager;
+import org.apache.maven.api.services.xml.ModelXmlFactory;
 
 /**
  * Installs the project artifacts of the main build into the local repository as a preparation to run the sub projects.
@@ -81,19 +61,17 @@ import org.eclipse.aether.util.filter.DependencyFilterUtils;
  * @author Benjamin Bentmann
  * @since 1.2
  */
-@Mojo(
-        name = "install",
-        defaultPhase = LifecyclePhase.PRE_INTEGRATION_TEST,
-        requiresDependencyResolution = ResolutionScope.TEST,
-        threadSafe = true)
-public class InstallMojo extends AbstractMojo {
+@Mojo(name = "install", defaultPhase = "pre-integration-test")
+public class InstallMojo implements org.apache.maven.api.plugin.Mojo {
 
-    // components used in Mojo
-    private final RepositorySystem repositorySystem;
+    @Inject
+    private Log log;
 
-    private final MavenSession session;
+    @Inject
+    private Session session;
 
-    private final MavenProject project;
+    @Inject
+    private Project project;
 
     /**
      * The path to the local repository into which the project artifacts should be installed for the integration tests.
@@ -101,10 +79,7 @@ public class InstallMojo extends AbstractMojo {
      * possibly broken artifacts, it is strongly recommended to use an isolated repository for the integration tests
      * (e.g. <code>${project.build.directory}/it-repo</code>).
      */
-    @Parameter(
-            property = "invoker.localRepositoryPath",
-            defaultValue = "${session.localRepository.basedir}",
-            required = true)
+    @Parameter(property = "invoker.localRepositoryPath")
     private File localRepositoryPath;
 
     /**
@@ -141,132 +116,140 @@ public class InstallMojo extends AbstractMojo {
     private String[] extraArtifacts;
 
     /**
-     * Scope to resolve project artifacts.
+     * Scope to resolve project artifacts. One of <code>compile</code>, <code>runtime</code>, <code>test</code>, or a
+     * Maven 4 path scope id (<code>main-compile</code>, <code>main-runtime</code>, <code>test-compile</code>,
+     * <code>test-runtime</code>).
      *
      * @since 3.5.0
      */
     @Parameter(property = "invoker.install.scope", defaultValue = "runtime")
     private String scope;
 
-    @Inject
-    public InstallMojo(RepositorySystem repositorySystem, MavenSession session, MavenProject project) {
-        this.repositorySystem = repositorySystem;
-        this.session = session;
-        this.project = project;
-    }
+    private ModelXmlFactory modelXmlFactory;
 
     /**
      * Performs this mojo's tasks.
      *
-     * @throws MojoExecutionException If the artifacts could not be installed.
+     * @throws MojoException If the artifacts could not be installed.
      */
-    public void execute() throws MojoExecutionException {
+    @Override
+    public void execute() throws MojoException {
         if (skipInstallation) {
-            getLog().info("Skipping artifact installation per configuration.");
+            log.info("Skipping artifact installation per configuration.");
             return;
         }
 
-        Map<String, Artifact> resolvedArtifacts = new LinkedHashMap<>();
+        modelXmlFactory = session.getService(ModelXmlFactory.class);
+        Map<String, Resolved> resolvedArtifacts = new LinkedHashMap<>();
 
-        try {
+        resolveProjectArtifacts(resolvedArtifacts);
+        resolveProjectPoms(project, resolvedArtifacts);
+        resolveProjectDependencies(resolvedArtifacts);
+        resolveExtraArtifacts(resolvedArtifacts);
+        installArtifacts(resolvedArtifacts);
+    }
 
-            resolveProjectArtifacts(resolvedArtifacts);
-            resolveProjectPoms(project, resolvedArtifacts);
-            resolveProjectDependencies(resolvedArtifacts);
-            resolveExtraArtifacts(resolvedArtifacts);
-            installArtifacts(resolvedArtifacts);
+    /**
+     * An artifact together with the file that holds its content.
+     */
+    private static final class Resolved {
+        final Artifact artifact;
+        final Path path;
 
-        } catch (DependencyResolutionException | InstallationException | ArtifactResolutionException e) {
-            throw new MojoExecutionException(e.getMessage(), e);
+        Resolved(Artifact artifact, Path path) {
+            this.artifact = artifact;
+            this.path = path;
         }
     }
 
-    private void resolveProjectArtifacts(Map<String, Artifact> resolvedArtifacts) {
+    private static String key(Artifact a) {
+        return a.getGroupId()
+                + ':'
+                + a.getArtifactId()
+                + ':'
+                + a.getExtension()
+                + ':'
+                + a.getClassifier()
+                + ':'
+                + a.getVersion();
+    }
+
+    private void put(Map<String, Resolved> resolvedArtifacts, Artifact artifact, Path path) {
+        resolvedArtifacts.put(key(artifact), new Resolved(artifact, path));
+    }
+
+    private void resolveProjectArtifacts(Map<String, Resolved> resolvedArtifacts) {
+        ProjectManager projectManager = session.getService(ProjectManager.class);
 
         // pom packaging doesn't have a main artifact
-        if (project.getArtifact() != null && project.getArtifact().getFile() != null) {
-            Artifact artifact = RepositoryUtils.toArtifact(project.getArtifact());
-            resolvedArtifacts.put(ArtifactIdUtils.toId(artifact), artifact);
-        }
+        Optional<ProducedArtifact> mainArtifact = project.getMainArtifact();
+        mainArtifact.ifPresent(a -> session.getArtifactPath(a).ifPresent(path -> put(resolvedArtifacts, a, path)));
 
-        project.getAttachedArtifacts().stream()
-                .map(RepositoryUtils::toArtifact)
-                .forEach(a -> resolvedArtifacts.put(ArtifactIdUtils.toId(a), a));
+        for (ProducedArtifact attached : projectManager.getAttachedArtifacts(project)) {
+            session.getArtifactPath(attached).ifPresent(path -> put(resolvedArtifacts, attached, path));
+        }
     }
 
-    private void resolveProjectPoms(MavenProject project, Map<String, Artifact> resolvedArtifacts)
-            throws ArtifactResolutionException {
+    private void resolveProjectPoms(Project project, Map<String, Resolved> resolvedArtifacts) {
+        put(resolvedArtifacts, project.getPomArtifact(), project.getPomPath());
 
-        if (project == null) {
-            return;
+        // Project#getParent only knows parents that are part of the reactor, so walk the parent chain of the model
+        Parent parent = project.getModel().getParent();
+        if (parent != null) {
+            List<RemoteRepository> repositories =
+                    session.getService(ProjectManager.class).getRemoteProjectRepositories(project);
+            resolvePomWithParents(
+                    resolvePom(parent.getGroupId(), parent.getArtifactId(), parent.getVersion(), repositories),
+                    resolvedArtifacts,
+                    repositories);
         }
-
-        Artifact projectPom = RepositoryUtils.toArtifact(new ProjectArtifact(project));
-        if (projectPom.getFile() != null) {
-            resolvedArtifacts.put(projectPom.toString(), projectPom);
-        } else {
-            Artifact artifact = resolveArtifact(projectPom, project.getRemoteProjectRepositories());
-            resolvedArtifacts.put(ArtifactIdUtils.toId(artifact), artifact);
-        }
-        resolveProjectPoms(project.getParent(), resolvedArtifacts);
     }
 
-    private void resolveProjectDependencies(Map<String, Artifact> resolvedArtifacts)
-            throws ArtifactResolutionException, MojoExecutionException, DependencyResolutionException {
+    private void resolveProjectDependencies(Map<String, Resolved> resolvedArtifacts) {
+        DependencyResolverResult result = session.getService(DependencyResolver.class)
+                .resolve(DependencyResolverRequest.builder()
+                        .session(session)
+                        .requestType(DependencyResolverRequest.RequestType.RESOLVE)
+                        .project(project)
+                        .pathScope(toPathScope(scope))
+                        .build());
 
-        DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(scope);
+        List<Resolved> artifacts = new ArrayList<>();
+        result.getDependencies().forEach((dependency, path) -> artifacts.add(new Resolved(dependency, path)));
+        artifacts.forEach(a -> put(resolvedArtifacts, a.artifact, a.path));
+        resolvePomsForArtifacts(
+                artifacts.stream().map(a -> a.artifact).collect(Collectors.toList()),
+                resolvedArtifacts,
+                session.getService(ProjectManager.class).getRemoteProjectRepositories(project));
+    }
 
-        ArtifactTypeRegistry artifactTypeRegistry =
-                session.getRepositorySession().getArtifactTypeRegistry();
-
-        List<Dependency> managedDependencies = Optional.ofNullable(project.getDependencyManagement())
-                .map(DependencyManagement::getDependencies)
-                .orElseGet(Collections::emptyList)
-                .stream()
-                .map(d -> RepositoryUtils.toDependency(d, artifactTypeRegistry))
-                .collect(Collectors.toList());
-
-        List<Dependency> dependencies = project.getDependencies().stream()
-                .map(d -> RepositoryUtils.toDependency(d, artifactTypeRegistry))
-                .filter(d -> classpathFilter.accept(new DefaultDependencyNode(d), null))
-                .collect(Collectors.toList());
-
-        CollectRequest collectRequest = new CollectRequest();
-        collectRequest.setRootArtifact(RepositoryUtils.toArtifact(project.getArtifact()));
-        collectRequest.setDependencies(dependencies);
-        collectRequest.setManagedDependencies(managedDependencies);
-
-        collectRequest.setRepositories(project.getRemoteProjectRepositories());
-
-        DependencyRequest request = new DependencyRequest(collectRequest, classpathFilter);
-
-        DependencyResult dependencyResult =
-                repositorySystem.resolveDependencies(session.getRepositorySession(), request);
-
-        List<Artifact> artifacts = dependencyResult.getArtifactResults().stream()
-                .map(ArtifactResult::getArtifact)
-                .collect(Collectors.toList());
-
-        artifacts.forEach(a -> resolvedArtifacts.put(ArtifactIdUtils.toId(a), a));
-        resolvePomsForArtifacts(artifacts, resolvedArtifacts, collectRequest.getRepositories());
+    private PathScope toPathScope(String scope) {
+        switch (scope) {
+            case "compile":
+                return PathScope.MAIN_COMPILE;
+            case "runtime":
+                return PathScope.MAIN_RUNTIME;
+            case "test":
+                return PathScope.TEST_RUNTIME;
+            default:
+                return session.requirePathScope(scope);
+        }
     }
 
     /**
      * Resolve extra artifacts.
      */
-    private void resolveExtraArtifacts(Map<String, Artifact> resolvedArtifacts)
-            throws MojoExecutionException, DependencyResolutionException, ArtifactResolutionException {
-
+    private void resolveExtraArtifacts(Map<String, Resolved> resolvedArtifacts) {
         if (extraArtifacts == null) {
             return;
         }
 
-        DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.RUNTIME);
+        ProjectManager projectManager = session.getService(ProjectManager.class);
 
         for (String extraArtifact : extraArtifacts) {
             String[] gav = extraArtifact.split(":");
             if (gav.length < 3 || gav.length > 5) {
-                throw new MojoExecutionException("Invalid artifact " + extraArtifact);
+                throw new MojoException("Invalid artifact " + extraArtifact);
             }
 
             String groupId = gav[0];
@@ -283,153 +266,149 @@ public class InstallMojo extends AbstractMojo {
                 classifier = gav[4];
             }
 
-            ArtifactType artifactType =
-                    session.getRepositorySession().getArtifactTypeRegistry().get(type);
+            Type artifactType = session.requireType(type);
 
-            List<RemoteRepository> remoteRepositories =
-                    artifactType != null && "maven-plugin".equals(artifactType.getId())
-                            ? project.getRemotePluginRepositories()
-                            : project.getRemoteProjectRepositories();
+            List<RemoteRepository> remoteRepositories = Type.MAVEN_PLUGIN.equals(artifactType.id())
+                    ? projectManager.getRemotePluginRepositories(project)
+                    : projectManager.getRemoteProjectRepositories(project);
 
-            Artifact artifact = new DefaultArtifact(groupId, artifactId, classifier, null, version, artifactType);
+            DependencyCoordinates root = session.createDependencyCoordinates(session.createArtifactCoordinates(
+                    groupId, artifactId, version, classifier, artifactType.getExtension(), type));
 
-            resolvePomsForArtifacts(Collections.singletonList(artifact), resolvedArtifacts, remoteRepositories);
+            resolvePomWithParents(
+                    resolvePom(groupId, artifactId, version, remoteRepositories),
+                    resolvedArtifacts,
+                    remoteRepositories);
 
-            CollectRequest collectRequest = new CollectRequest();
-            Dependency root = new Dependency(artifact, JavaScopes.COMPILE);
-            collectRequest.setRoot(root);
-            collectRequest.setRepositories(remoteRepositories);
+            DependencyResolverResult result = session.getService(DependencyResolver.class)
+                    .resolve(DependencyResolverRequest.builder()
+                            .session(session)
+                            .requestType(DependencyResolverRequest.RequestType.RESOLVE)
+                            .dependencies(List.of(root))
+                            .pathScope(PathScope.MAIN_RUNTIME)
+                            .repositories(remoteRepositories)
+                            .build());
 
-            DependencyRequest request = new DependencyRequest(collectRequest, classpathFilter);
-            DependencyResult dependencyResult =
-                    repositorySystem.resolveDependencies(session.getRepositorySession(), request);
-
-            List<Artifact> artifacts = dependencyResult.getArtifactResults().stream()
-                    .map(ArtifactResult::getArtifact)
-                    .collect(Collectors.toList());
-
-            artifacts.forEach(a -> resolvedArtifacts.put(ArtifactIdUtils.toId(a), a));
-            resolvePomsForArtifacts(artifacts, resolvedArtifacts, collectRequest.getRepositories());
+            List<Resolved> artifacts = new ArrayList<>();
+            result.getDependencies().forEach((dependency, path) -> artifacts.add(new Resolved(dependency, path)));
+            artifacts.forEach(a -> put(resolvedArtifacts, a.artifact, a.path));
+            resolvePomsForArtifacts(
+                    artifacts.stream().map(a -> a.artifact).collect(Collectors.toList()),
+                    resolvedArtifacts,
+                    remoteRepositories);
         }
     }
 
     private void resolvePomsForArtifacts(
-            List<Artifact> artifacts,
-            Map<String, Artifact> resolvedArtifacts,
-            List<RemoteRepository> remoteRepositories)
-            throws ArtifactResolutionException, MojoExecutionException {
-
+            Collection<Artifact> artifacts,
+            Map<String, Resolved> resolvedArtifacts,
+            List<RemoteRepository> remoteRepositories) {
         for (Artifact a : artifacts) {
-            Artifact artifactResult = resolveArtifact(new SubArtifact(a, "", "pom"), remoteRepositories);
-            resolvePomWithParents(artifactResult, resolvedArtifacts, remoteRepositories);
+            DownloadedArtifact pom =
+                    resolvePom(a.getGroupId(), a.getArtifactId(), a.getVersion().toString(), remoteRepositories);
+            resolvePomWithParents(pom, resolvedArtifacts, remoteRepositories);
         }
     }
 
     private void resolvePomWithParents(
-            Artifact artifact, Map<String, Artifact> resolvedArtifacts, List<RemoteRepository> remoteRepositories)
-            throws MojoExecutionException, ArtifactResolutionException {
+            DownloadedArtifact artifact, Map<String, Resolved> resolvedArtifacts, List<RemoteRepository> repositories) {
 
-        if (resolvedArtifacts.containsKey(ArtifactIdUtils.toId(artifact))) {
+        if (resolvedArtifacts.containsKey(key(artifact))) {
             return;
         }
 
-        Model model = PomUtils.loadPom(artifact.getFile());
+        Model model = PomUtils.loadPom(modelXmlFactory, artifact.getPath());
         Parent parent = model.getParent();
         if (parent != null) {
-            DefaultArtifact pom =
-                    new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(), "", "pom", parent.getVersion());
-            Artifact resolvedPom = resolveArtifact(pom, remoteRepositories);
-            resolvePomWithParents(resolvedPom, resolvedArtifacts, remoteRepositories);
+            DownloadedArtifact resolvedPom =
+                    resolvePom(parent.getGroupId(), parent.getArtifactId(), parent.getVersion(), repositories);
+            resolvePomWithParents(resolvedPom, resolvedArtifacts, repositories);
         }
 
-        resolvedArtifacts.put(ArtifactIdUtils.toId(artifact), artifact);
+        put(resolvedArtifacts, artifact, artifact.getPath());
     }
 
-    private Artifact resolveArtifact(Artifact artifact, List<RemoteRepository> remoteRepositories)
-            throws ArtifactResolutionException {
-
-        ArtifactRequest request = new ArtifactRequest();
-        request.setArtifact(artifact);
-        request.setRepositories(remoteRepositories);
-        ArtifactResult artifactResult = repositorySystem.resolveArtifact(session.getRepositorySession(), request);
-        return artifactResult.getArtifact();
+    private DownloadedArtifact resolvePom(
+            String groupId, String artifactId, String version, List<RemoteRepository> remoteRepositories) {
+        return session.resolveArtifact(
+                session.createArtifactCoordinates(groupId, artifactId, version, "pom"), remoteRepositories);
     }
 
     /**
      * Install list of artifacts into local repository.
      */
-    private void installArtifacts(Map<String, Artifact> resolvedArtifacts) throws InstallationException {
+    private void installArtifacts(Map<String, Resolved> resolvedArtifacts) {
 
-        RepositorySystemSession systemSessionForLocalRepo = createSystemSessionForLocalRepo();
+        Session sessionForLocalRepo = createSessionForLocalRepo();
 
         // we can have on dependency two artifacts with the same groupId:artifactId
         // with different version, in such case when we install both in one request
         // metadata will contain only one version
 
-        Map<String, List<Artifact>> collect = resolvedArtifacts.values().stream()
-                .filter(a -> !hasTheSamePathAsTarget(a, systemSessionForLocalRepo))
+        Map<String, List<Resolved>> collect = resolvedArtifacts.values().stream()
+                .filter(a -> !hasTheSamePathAsTarget(a, sessionForLocalRepo))
                 .collect(Collectors.groupingBy(
-                        a -> String.format("%s:%s:%s", a.getGroupId(), a.getArtifactId(), a.getVersion()),
+                        a -> String.format(
+                                "%s:%s:%s",
+                                a.artifact.getGroupId(), a.artifact.getArtifactId(), a.artifact.getVersion()),
                         LinkedHashMap::new,
                         Collectors.toList()));
 
-        for (List<Artifact> artifacts : collect.values()) {
-            InstallRequest request = new InstallRequest();
-            request.setArtifacts(artifacts);
-            repositorySystem.install(systemSessionForLocalRepo, request);
+        // Artifacts of reactor projects must be installed as they are: Session#setArtifactPath rewrites the file of
+        // every project artifact with the same id, and throws for the transformed (consumer) POM.
+        Map<String, ProducedArtifact> reactorArtifacts = new LinkedHashMap<>();
+        ProjectManager projectManager = session.getService(ProjectManager.class);
+        for (Project reactorProject : session.getProjects()) {
+            reactorProject.getArtifacts().forEach(a -> reactorArtifacts.put(key(a), a));
+            projectManager.getAttachedArtifacts(reactorProject).forEach(a -> reactorArtifacts.put(key(a), a));
+        }
+
+        for (List<Resolved> artifacts : collect.values()) {
+            List<ProducedArtifact> produced = new ArrayList<>();
+            for (Resolved resolved : artifacts) {
+                Artifact a = resolved.artifact;
+                ProducedArtifact p = reactorArtifacts.get(key(a));
+                if (p == null) {
+                    p = sessionForLocalRepo.createProducedArtifact(
+                            a.getGroupId(),
+                            a.getArtifactId(),
+                            a.getVersion().toString(),
+                            a.getClassifier(),
+                            a.getExtension(),
+                            null);
+                    sessionForLocalRepo.setArtifactPath(p, resolved.path);
+                }
+                produced.add(p);
+            }
+            sessionForLocalRepo.installArtifacts(produced);
         }
     }
 
-    private boolean hasTheSamePathAsTarget(Artifact artifact, RepositorySystemSession systemSession) {
+    private boolean hasTheSamePathAsTarget(Resolved resolved, Session sessionForLocalRepo) {
         try {
-            LocalRepositoryManager lrm = systemSession.getLocalRepositoryManager();
-            File targetBasedir = lrm.getRepository().getBasedir();
-            if (targetBasedir == null) {
+            Path targetFile = sessionForLocalRepo.getPathForLocalArtifact(resolved.artifact);
+            if (targetFile == null || !Files.exists(targetFile)) {
                 return false;
             }
-            File targetFile = new File(targetBasedir, lrm.getPathForLocalArtifact(artifact)).getCanonicalFile();
-            File sourceFile = artifact.getFile().getCanonicalFile();
-            if (Objects.equals(targetFile, sourceFile)) {
-                getLog().debug("Skip install the same target " + sourceFile);
+            if (Files.isSameFile(targetFile, resolved.path)) {
+                log.debug("Skip install the same target " + resolved.path);
                 return true;
             }
             return false;
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            throw new MojoException(e.getMessage(), e);
         }
     }
 
     /**
-     * Create a new {@link  RepositorySystemSession} connected with local repo.
+     * Create a new {@link Session} connected with the local repo that should receive the artifacts.
      */
-    private RepositorySystemSession createSystemSessionForLocalRepo() {
-        RepositorySystemSession repositorySystemSession = session.getRepositorySession();
-        if (localRepositoryPath != null) {
-            // "clone" repository session and replace localRepository
-            DefaultRepositorySystemSession newSession =
-                    new DefaultRepositorySystemSession(session.getRepositorySession());
-            // Clear cache, since we're using a new local repository
-            newSession.setCache(new DefaultRepositoryCache());
-            // keep same repositoryType
-            String contentType = newSession.getLocalRepository().getContentType();
-            if ("enhanced".equals(contentType)) {
-                contentType = "default";
-            }
-            // the forked IT builds read localRepositoryPath in the flat layout (invoker:run pins the property to
-            // false), so write it that way as well instead of inheriting a split layout from the outer build,
-            // which would put the artifacts under "installed/..." where the IT builds never look (MINVOKER-377)
-            newSession.setConfigProperty(AbstractInvokerMojo.SPLIT_LOCAL_REPOSITORY_PROPERTY, Boolean.FALSE);
-            getLog().debug("Ignoring any split local repository configuration for the IT local repository");
-
-            LocalRepositoryManager localRepositoryManager = repositorySystem.newLocalRepositoryManager(
-                    newSession, new LocalRepository(localRepositoryPath, contentType));
-
-            newSession.setLocalRepositoryManager(localRepositoryManager);
-            repositorySystemSession = newSession;
-            getLog().debug("localRepoPath: "
-                    + localRepositoryManager.getRepository().getBasedir());
+    private Session createSessionForLocalRepo() {
+        if (localRepositoryPath == null) {
+            return session;
         }
-
-        return repositorySystemSession;
+        Session newSession = session.withLocalRepository(session.createLocalRepository(localRepositoryPath.toPath()));
+        log.debug("localRepoPath: " + newSession.getLocalRepository().getPath());
+        return newSession;
     }
 }

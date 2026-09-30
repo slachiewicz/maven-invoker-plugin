@@ -24,12 +24,11 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
-import org.apache.maven.execution.MavenSession;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.Session;
+import org.apache.maven.api.plugin.Log;
 import org.apache.maven.plugins.invoker.model.BuildJob;
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.settings.Settings;
 import org.codehaus.plexus.util.ReflectionUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,25 +50,23 @@ class InvokerMojoTest {
     private static final String INTERPOLATION_PROJECT = "interpolation" + File.separator + "pom.xml";
     private static final String WITHOUT_POM_PROJECT = "without-pom-project-dir";
 
-    private final InvokerMojo invokerMojo = new InvokerMojo(null, null, null, null);
+    private final InvokerMojo invokerMojo = new InvokerMojo();
 
-    private MavenProject getMavenProject() {
-        MavenProject mavenProject = new MavenProject();
-        mavenProject.setFile(new File("target/foo.txt"));
-        return mavenProject;
+    private Project getMavenProject() {
+        return TestUtil.project(Map.of());
     }
 
     @Test
     void singleInvokerTest() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = getMavenProject();
         String dirPath = getBasedir() + "/src/test/resources/unit";
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(dirPath));
         setVariableValueToObject(invokerMojo, "invokerPropertiesFile", "invoker.properties");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(mavenProject));
+        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(Map.of()));
         setVariableValueToObject(invokerMojo, "invokerTest", "*dummy*");
-        setVariableValueToObject(invokerMojo, "settings", new Settings());
+        setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
 
         // when
         List<BuildJob> jobs = invokerMojo.getBuildJobs();
@@ -81,14 +78,14 @@ class InvokerMojoTest {
     @Test
     void multiInvokerTest() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = getMavenProject();
         String dirPath = getBasedir() + "/src/test/resources/unit";
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(dirPath));
         setVariableValueToObject(invokerMojo, "invokerPropertiesFile", "invoker.properties");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(mavenProject));
+        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(Map.of()));
         setVariableValueToObject(invokerMojo, "invokerTest", "*dummy*,*terpolatio*");
-        setVariableValueToObject(invokerMojo, "settings", new Settings());
+        setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
 
         // when
         List<BuildJob> jobs = invokerMojo.getBuildJobs();
@@ -100,14 +97,14 @@ class InvokerMojoTest {
     @Test
     void fullPatternInvokerTest() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = getMavenProject();
         String dirPath = getBasedir() + "/src/test/resources/unit";
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(dirPath));
         setVariableValueToObject(invokerMojo, "invokerPropertiesFile", "invoker.properties");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(mavenProject));
+        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(Map.of()));
         setVariableValueToObject(invokerMojo, "invokerTest", "*");
-        setVariableValueToObject(invokerMojo, "settings", new Settings());
+        setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
 
         // when
         List<BuildJob> jobs = invokerMojo.getBuildJobs();
@@ -122,13 +119,13 @@ class InvokerMojoTest {
     @Test
     void setupInProjectList() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = getMavenProject();
         String dirPath = getBasedir() + "/src/test/resources/unit";
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(dirPath));
         setVariableValueToObject(invokerMojo, "invokerPropertiesFile", "invoker.properties");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(mavenProject));
-        setVariableValueToObject(invokerMojo, "settings", new Settings());
+        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(Map.of()));
+        setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
         setVariableValueToObject(invokerMojo, "setupIncludes", Collections.singletonList("dum*/pom.xml"));
 
         // when
@@ -154,10 +151,10 @@ class InvokerMojoTest {
         String dirPath = getBasedir() + "/src/test/resources/unit";
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(dirPath));
         setVariableValueToObject(invokerMojo, "invokerPropertiesFile", "invoker.properties");
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = getMavenProject();
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(mavenProject));
-        setVariableValueToObject(invokerMojo, "settings", new Settings());
+        setVariableValueToObject(invokerMojo, "interpolatorUtils", new InterpolatorUtils(Map.of()));
+        setVariableValueToObject(invokerMojo, "settings", TestUtil.settings());
         setVariableValueToObject(invokerMojo, "setupIncludes", Collections.singletonList("dum*/pom.xml"));
         setVariableValueToObject(invokerMojo, "invokerTest", "*project-dir*");
 
@@ -191,7 +188,7 @@ class InvokerMojoTest {
     void rerunFailingTestsCountShouldBeUsedForWholeRun() throws Exception {
         // given
         setVariableValueToObject(invokerMojo, "rerunFailingTestsCount", 2);
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
 
         // when & then
         assertThat(invokerMojo.getRerunFailingTestsCount()).isEqualTo(2);
@@ -202,7 +199,7 @@ class InvokerMojoTest {
         // given
         setVariableValueToObject(invokerMojo, "rerunFailingTestsCount", 2);
         setVariableValueToObject(invokerMojo, "invokerTest", "*dummy*");
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
 
         // when & then
         assertThat(invokerMojo.getRerunFailingTestsCount()).isEqualTo(2);
@@ -211,23 +208,23 @@ class InvokerMojoTest {
     @Test
     void rerunFailingTestsCountShouldBeDisabledForTestSelectedOnCommandLine() throws Exception {
         // given
-        Properties userProperties = new Properties();
-        userProperties.setProperty("invoker.test", "*dummy*");
+        Map<String, String> userProperties = Map.of("invoker.test", "*dummy*");
 
         setVariableValueToObject(invokerMojo, "rerunFailingTestsCount", 2);
         setVariableValueToObject(invokerMojo, "invokerTest", "*dummy*");
+        setVariableValueToObject(invokerMojo, "log", mock(Log.class));
         setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(userProperties));
 
         // when & then
         assertThat(invokerMojo.getRerunFailingTestsCount()).isZero();
     }
 
-    private MavenSession sessionWithUserProperties(Properties userProperties) {
-        return sessionWithProperties(userProperties, new Properties());
+    private Session sessionWithUserProperties(Map<String, String> userProperties) {
+        return sessionWithProperties(userProperties, Map.of());
     }
 
-    private MavenSession sessionWithProperties(Properties userProperties, Properties systemProperties) {
-        MavenSession session = mock(MavenSession.class);
+    private Session sessionWithProperties(Map<String, String> userProperties, Map<String, String> systemProperties) {
+        Session session = mock(Session.class);
         when(session.getUserProperties()).thenReturn(userProperties);
         when(session.getSystemProperties()).thenReturn(systemProperties);
         return session;
@@ -236,11 +233,10 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeParameterWinsOverCompilerProperties() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
-        mavenProject.getProperties().setProperty("maven.compiler.release", "17");
-        mavenProject.getProperties().setProperty("maven.compiler.target", "11");
+        Project mavenProject = TestUtil.project(Map.of("maven.compiler.release", "17", "maven.compiler.target", "11"));
+
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
         setVariableValueToObject(invokerMojo, "scriptTargetBytecode", "8");
 
         // when
@@ -253,11 +249,10 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeFallsBackToMavenCompilerReleaseBeforeTarget() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
-        mavenProject.getProperties().setProperty("maven.compiler.release", "17");
-        mavenProject.getProperties().setProperty("maven.compiler.target", "11");
+        Project mavenProject = TestUtil.project(Map.of("maven.compiler.release", "17", "maven.compiler.target", "11"));
+
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
 
         // when
         String targetBytecode = invokeHandleScriptRunnerAndGetGroovyTargetBytecode();
@@ -269,10 +264,9 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeFallsBackToMavenCompilerTargetProperty() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
-        mavenProject.getProperties().setProperty("maven.compiler.target", "11");
+        Project mavenProject = TestUtil.project(Map.of("maven.compiler.target", "11"));
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
 
         // when
         String targetBytecode = invokeHandleScriptRunnerAndGetGroovyTargetBytecode();
@@ -284,12 +278,9 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeUserPropertyWinsOverProjectProperty() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
-        mavenProject.getProperties().setProperty("maven.compiler.release", "17");
-        Properties userProperties = new Properties();
-        userProperties.setProperty("maven.compiler.release", "21");
-        Properties systemProperties = new Properties();
-        systemProperties.setProperty("maven.compiler.release", "17");
+        Project mavenProject = TestUtil.project(Map.of("maven.compiler.release", "17"));
+        Map<String, String> userProperties = Map.of("maven.compiler.release", "21");
+        Map<String, String> systemProperties = Map.of("maven.compiler.release", "17");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
         setVariableValueToObject(invokerMojo, "session", sessionWithProperties(userProperties, systemProperties));
 
@@ -303,12 +294,10 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeSystemPropertyWinsOverProjectProperty() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
-        mavenProject.getProperties().setProperty("maven.compiler.release", "11");
-        Properties systemProperties = new Properties();
-        systemProperties.setProperty("maven.compiler.release", "17");
+        Project mavenProject = TestUtil.project(Map.of("maven.compiler.release", "11"));
+        Map<String, String> systemProperties = Map.of("maven.compiler.release", "17");
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "session", sessionWithProperties(new Properties(), systemProperties));
+        setVariableValueToObject(invokerMojo, "session", sessionWithProperties(Map.of(), systemProperties));
 
         // when
         String targetBytecode = invokeHandleScriptRunnerAndGetGroovyTargetBytecode();
@@ -320,9 +309,9 @@ class InvokerMojoTest {
     @Test
     void scriptTargetBytecodeIsUnsetWhenNeitherParameterNorPropertyIsPresent() throws Exception {
         // given
-        MavenProject mavenProject = getMavenProject();
+        Project mavenProject = TestUtil.project(Map.of());
         setVariableValueToObject(invokerMojo, "project", mavenProject);
-        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(new Properties()));
+        setVariableValueToObject(invokerMojo, "session", sessionWithUserProperties(Map.of()));
 
         // when
         String targetBytecode = invokeHandleScriptRunnerAndGetGroovyTargetBytecode();
@@ -332,6 +321,7 @@ class InvokerMojoTest {
     }
 
     private String invokeHandleScriptRunnerAndGetGroovyTargetBytecode() throws Exception {
+        setVariableValueToObject(invokerMojo, "log", mock(Log.class));
         Method method = AbstractInvokerMojo.class.getDeclaredMethod("handleScriptRunnerWithScriptClassPath");
         method.setAccessible(true);
         method.invoke(invokerMojo);

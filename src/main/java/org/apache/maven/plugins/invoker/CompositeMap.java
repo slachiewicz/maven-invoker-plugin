@@ -23,7 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.maven.project.MavenProject;
+import org.apache.maven.api.Project;
 import org.codehaus.plexus.util.introspection.ReflectionValueExtractor;
 
 /**
@@ -37,7 +37,7 @@ class CompositeMap implements Map<String, Object> {
     /**
      * The Maven project from which to extract interpolated values, never <code>null</code>.
      */
-    private MavenProject mavenProject;
+    private Project project;
 
     /**
      * The set of additional properties from which to extract interpolated values, never <code>null</code>.
@@ -52,16 +52,16 @@ class CompositeMap implements Map<String, Object> {
     /**
      * Creates a new interpolation source backed by the specified Maven project and some user-specified properties.
      *
-     * @param mavenProject The Maven project from which to extract interpolated values, must not be <code>null</code>.
+     * @param project The Maven project from which to extract interpolated values, must not be <code>null</code>.
      * @param properties The set of additional properties from which to extract interpolated values, may be
      *            <code>null</code>.
      * @param escapeXml {@code true}, to escape any XML special characters; {@code false}, to not perform any escaping.
      */
-    protected CompositeMap(MavenProject mavenProject, Map<String, Object> properties, boolean escapeXml) {
-        if (mavenProject == null) {
+    protected CompositeMap(Project project, Map<String, Object> properties, boolean escapeXml) {
+        if (project == null) {
             throw new IllegalArgumentException("no project specified");
         }
-        this.mavenProject = mavenProject;
+        this.project = project;
         this.properties = properties == null ? new HashMap<String, Object>() : properties;
         this.escapeXml = escapeXml;
     }
@@ -88,7 +88,7 @@ class CompositeMap implements Map<String, Object> {
         String expression = (String) key;
         if (expression.startsWith("project.") || expression.startsWith("pom.")) {
             try {
-                Object evaluated = ReflectionValueExtractor.evaluate(expression, this.mavenProject);
+                Object evaluated = evaluate(expression);
                 if (evaluated != null) {
                     return true;
                 }
@@ -97,7 +97,7 @@ class CompositeMap implements Map<String, Object> {
             }
         }
 
-        return properties.containsKey(key) || mavenProject.getProperties().containsKey(key);
+        return properties.containsKey(key) || project.getModel().getProperties().containsKey(key);
     }
 
     /**
@@ -119,6 +119,23 @@ class CompositeMap implements Map<String, Object> {
     }
 
     /**
+     * Evaluates an expression like <code>project.build.directory</code> against the effective model of the project.
+     * The v4 {@link Project} is not a bean over the whole model, so everything except the location properties is read
+     * from {@link Project#getModel()}.
+     */
+    private Object evaluate(String expression) throws Exception {
+        String path = expression.substring(expression.indexOf('.') + 1);
+        switch (path) {
+            case "basedir":
+                return project.getBasedir();
+            case "file":
+                return project.getPomPath();
+            default:
+                return ReflectionValueExtractor.evaluate("project." + path, project.getModel());
+        }
+    }
+
+    /**
      * {@inheritDoc}
      *
      * @see java.util.Map#get(java.lang.Object)
@@ -132,7 +149,7 @@ class CompositeMap implements Map<String, Object> {
         String expression = (String) key;
         if (expression.startsWith("project.") || expression.startsWith("pom.")) {
             try {
-                Object evaluated = ReflectionValueExtractor.evaluate(expression, this.mavenProject);
+                Object evaluated = evaluate(expression);
                 if (evaluated != null) {
                     value = evaluated;
                 }
@@ -146,7 +163,7 @@ class CompositeMap implements Map<String, Object> {
         }
 
         if (value == null) {
-            value = this.mavenProject.getProperties().get(key);
+            value = this.project.getModel().getProperties().get(key);
         }
 
         if (value != null && this.escapeXml) {
@@ -166,7 +183,7 @@ class CompositeMap implements Map<String, Object> {
      * @see java.util.Map#isEmpty()
      */
     public boolean isEmpty() {
-        return this.mavenProject.getProperties().isEmpty() && this.properties.isEmpty();
+        return this.project.getModel().getProperties().isEmpty() && this.properties.isEmpty();
     }
 
     /**

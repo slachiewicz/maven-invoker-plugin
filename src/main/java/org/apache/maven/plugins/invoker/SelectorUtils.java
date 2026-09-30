@@ -35,7 +35,6 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import org.apache.maven.plugins.invoker.AbstractInvokerMojo.ToolchainPrivateManager;
-import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.util.Os;
 
 /**
@@ -76,30 +75,6 @@ class SelectorUtils {
             return defaultMatch;
         }
         return families.stream().anyMatch(Os::isFamily);
-    }
-
-    /**
-     * Retrieves the current Maven version.
-     *
-     * @return The current Maven version.
-     */
-    static String getMavenVersion() {
-        try {
-            // This relies on the fact that MavenProject is the in core classloader
-            // and that the core classloader is for the maven-core artifact
-            // and that should have a pom.properties file
-            // if this ever changes, we will have to revisit this code.
-            Properties properties = new Properties();
-            // CHECKSTYLE_OFF: LineLength
-            properties.load(MavenProject.class
-                    .getClassLoader()
-                    .getResourceAsStream("META-INF/maven/org.apache.maven/maven-core/pom.properties"));
-            // CHECKSTYLE_ON: LineLength
-            String str = properties.getProperty("version");
-            return str == null ? null : str.trim();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     static String getMavenVersion(File mavenHome) throws IOException {

@@ -18,37 +18,28 @@
  */
 package org.apache.maven.plugins.invoker;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.Reader;
+import java.nio.file.Path;
 
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.codehaus.plexus.util.xml.XmlStreamReader;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.apache.maven.api.model.Model;
+import org.apache.maven.api.plugin.MojoException;
+import org.apache.maven.api.services.xml.ModelXmlFactory;
+import org.apache.maven.api.services.xml.XmlReaderException;
 
-/**
- * Provides utility methods for POM processing.
- *
- * @author Benjamin Bentmann
- */
 class PomUtils {
 
     /**
      * Loads the (raw) model from the specified POM file.
      *
+     * @param modelXmlFactory The factory to read the model with, must not be <code>null</code>.
      * @param pomFile The path to the POM file to load, must not be <code>null</code>.
      * @return The raw model, never <code>null</code>.
-     * @throws MojoExecutionException If the POM file could not be loaded.
+     * @throws MojoException If the POM file could not be loaded.
      */
-    public static Model loadPom(File pomFile) throws MojoExecutionException {
-        try (Reader reader = new XmlStreamReader(pomFile)) {
-            return new MavenXpp3Reader().read(reader, false);
-        } catch (XmlPullParserException e) {
-            throw new MojoExecutionException("Failed to parse POM: " + pomFile, e);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to read POM: " + pomFile, e);
+    public static Model loadPom(ModelXmlFactory modelXmlFactory, Path pomFile) throws MojoException {
+        try {
+            return modelXmlFactory.read(pomFile, false);
+        } catch (XmlReaderException e) {
+            throw new MojoException("Failed to parse POM: " + pomFile, e);
         }
     }
 }

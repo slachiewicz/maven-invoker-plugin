@@ -20,7 +20,7 @@ package org.apache.maven.plugins.invoker;
 
 import java.util.Collections;
 
-import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.api.plugin.Log;
 import org.apache.maven.plugins.invoker.model.BuildJob;
 import org.junit.jupiter.api.Test;
 

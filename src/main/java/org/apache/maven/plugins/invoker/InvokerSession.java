@@ -26,8 +26,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.plugin.MojoException;
 import org.apache.maven.plugins.invoker.model.BuildJob;
 import org.codehaus.plexus.util.IOUtil;
 
@@ -195,7 +195,7 @@ class InvokerSession {
         logBuildJobList(logger, true, "The following builds were skipped:", skippedJobs);
     }
 
-    public void logFailedBuildLog(Log logger, boolean ignoreFailures) throws MojoFailureException {
+    public void logFailedBuildLog(Log logger, boolean ignoreFailures) throws MojoException {
         updateStats();
 
         List<BuildJob> jobToLogs = new ArrayList<>(failedJobs);
@@ -254,7 +254,7 @@ class InvokerSession {
                     logWithLevel(logger, ignoreFailures, "");
 
                 } catch (IOException e) {
-                    throw new MojoFailureException(e.getMessage(), e);
+                    throw new MojoException(e.getMessage(), e);
                 }
             }
         }
@@ -273,9 +273,9 @@ class InvokerSession {
      *
      * @param logger The mojo logger to output messages to, must not be <code>null</code>.
      * @param ignoreFailures A flag whether failures should be ignored or whether a build failure should be signaled.
-     * @throws MojoFailureException If failures are present and not ignored.
+     * @throws MojoException If failures are present and not ignored.
      */
-    public void handleFailures(Log logger, boolean ignoreFailures) throws MojoFailureException {
+    public void handleFailures(Log logger, boolean ignoreFailures) throws MojoException {
         updateStats();
 
         if (!failedJobs.isEmpty()) {
@@ -284,7 +284,7 @@ class InvokerSession {
             if (ignoreFailures) {
                 logger.warn("Ignoring that " + message);
             } else {
-                throw new MojoFailureException(message + " See console output above for details.");
+                throw new MojoException(message + " See console output above for details.");
             }
         }
 
@@ -294,7 +294,7 @@ class InvokerSession {
             if (ignoreFailures) {
                 logger.warn("Ignoring that " + message);
             } else {
-                throw new MojoFailureException(message + " See console output above for details.");
+                throw new MojoException(message + " See console output above for details.");
             }
         }
     }

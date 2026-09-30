@@ -18,25 +18,27 @@
  */
 package org.apache.maven.plugins.invoker;
 
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.ResourceBundle;
 
+import org.apache.maven.api.plugin.Log;
 import org.apache.maven.doxia.sink.Sink;
-import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.invoker.model.BuildJob;
 import org.apache.maven.reporting.AbstractMavenReportRenderer;
-import org.codehaus.plexus.i18n.I18N;
 
 public class InvokerReportRenderer extends AbstractMavenReportRenderer {
-    private final I18N i18n;
     private final Locale locale;
+
+    private final ResourceBundle bundle;
     private final Log log;
     private final List<BuildJob> buildJobs;
 
-    public InvokerReportRenderer(Sink sink, I18N i18n, Locale locale, Log log, List<BuildJob> buildJobs) {
+    public InvokerReportRenderer(Sink sink, Locale locale, Log log, List<BuildJob> buildJobs) {
         super(sink);
-        this.i18n = i18n;
         this.locale = locale;
+        this.bundle = ResourceBundle.getBundle("invoker-report", locale);
         this.log = log;
         this.buildJobs = buildJobs;
     }
@@ -51,7 +53,7 @@ public class InvokerReportRenderer extends AbstractMavenReportRenderer {
      * @return the translated key.
      */
     private String getI18nString(String key) {
-        return i18n.getString("invoker-report", locale, "report.invoker." + key);
+        return bundle.getString("report.invoker." + key);
     }
 
     /**
@@ -60,7 +62,7 @@ public class InvokerReportRenderer extends AbstractMavenReportRenderer {
      * @return the translated key.
      */
     private String formatI18nString(String key, Object... args) {
-        return i18n.format("invoker-report", locale, "report.invoker." + key, args);
+        return new MessageFormat(bundle.getString("report.invoker." + key), locale).format(args);
     }
 
     @Override

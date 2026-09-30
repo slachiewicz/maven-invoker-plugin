@@ -18,21 +18,19 @@
  */
 package org.apache.maven.plugins.invoker;
 
-import javax.inject.Inject;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.ResourceBundle;
 
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.api.plugin.annotations.Mojo;
+import org.apache.maven.api.plugin.annotations.Parameter;
 import org.apache.maven.plugins.invoker.model.BuildJob;
 import org.apache.maven.plugins.invoker.model.io.xpp3.BuildJobXpp3Reader;
 import org.apache.maven.reporting.AbstractMavenReport;
 import org.apache.maven.reporting.MavenReportException;
-import org.codehaus.plexus.i18n.I18N;
 import org.codehaus.plexus.util.xml.XmlStreamReader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 
@@ -44,7 +42,7 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
  * @author Olivier Lamy
  * @since 1.4
  */
-@Mojo(name = "report", threadSafe = true)
+@Mojo(name = "report")
 public class InvokerReport extends AbstractMavenReport {
 
     /**
@@ -52,16 +50,6 @@ public class InvokerReport extends AbstractMavenReport {
      */
     @Parameter(defaultValue = "${project.build.directory}/invoker-reports", property = "invoker.reportsDirectory")
     private File reportsDirectory;
-
-    /**
-     * Internationalization component
-     */
-    protected final I18N i18n;
-
-    @Inject
-    public InvokerReport(I18N i18n) {
-        this.i18n = i18n;
-    }
 
     protected void executeReport(Locale locale) throws MavenReportException {
         File[] reportFiles = getReportFiles();
@@ -76,7 +64,7 @@ public class InvokerReport extends AbstractMavenReport {
                 throw new MavenReportException("Failed to read report file: " + reportFile, e);
             }
         }
-        InvokerReportRenderer r = new InvokerReportRenderer(getSink(), i18n, locale, getLog(), buildJobs);
+        InvokerReportRenderer r = new InvokerReportRenderer(getSink(), locale, log, buildJobs);
         r.render();
     }
 
@@ -86,7 +74,7 @@ public class InvokerReport extends AbstractMavenReport {
      * @return The text appropriate for the locale.
      */
     private String getI18nString(Locale locale, String key) {
-        return i18n.getString("invoker-report", locale, "report.invoker." + key);
+        return ResourceBundle.getBundle("invoker-report", locale).getString("report.invoker." + key);
     }
 
     /** {@inheritDoc} */

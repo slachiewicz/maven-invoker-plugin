@@ -21,7 +21,7 @@ package org.apache.maven.plugins.invoker;
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.api.plugin.Log;
 import org.apache.maven.shared.invoker.InvocationOutputHandler;
 
 /**

@@ -26,4 +26,4 @@ def settings = new XmlSlurper().parse( effectiveSettings )
 def server = settings.servers.server.find{ it.id.equals('dummy-it-settings-merge') }
 
 if( !server.password.equals('overridden') )
-  throw new org.apache.maven.plugin.MojoExecutionException("Incorrect server password - specified settings.xml not merged/dominant " + server.password)
+  throw new IllegalStateException("Incorrect server password - specified settings.xml not merged/dominant " + server.password)

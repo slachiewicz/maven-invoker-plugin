@@ -19,12 +19,37 @@
 package org.apache.maven.plugins.invoker;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.Map;
 
+import org.apache.maven.api.Project;
+import org.apache.maven.api.model.Model;
+import org.apache.maven.api.settings.Settings;
 import org.codehaus.plexus.util.ReflectionUtils;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TestUtil {
 
     private TestUtil() {}
+
+    static Project project(Model model, Path pom) {
+        Project project = mock(Project.class);
+        when(project.getModel()).thenReturn(model);
+        when(project.getPomPath()).thenReturn(pom);
+        when(project.getBasedir()).thenReturn(pom.getParent());
+        return project;
+    }
+
+    static Project project(Map<String, String> properties) {
+        return project(
+                Model.newBuilder().properties(properties).build(), new File(getBasedir(), "target/foo.txt").toPath());
+    }
+
+    static Settings settings() {
+        return Settings.newInstance();
+    }
 
     static String getBasedir() {
         String path = System.getProperty("basedir");

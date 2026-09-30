@@ -18,11 +18,9 @@
  */
 package org.apache.maven.plugins.invoker;
 
-import javax.inject.Inject;
-import javax.inject.Named;
+import java.util.Map;
 
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.project.MavenProject;
+import org.apache.maven.api.plugin.MojoException;
 import org.codehaus.plexus.interpolation.InterpolationException;
 import org.codehaus.plexus.interpolation.Interpolator;
 import org.codehaus.plexus.interpolation.MapBasedValueSource;
@@ -31,7 +29,6 @@ import org.codehaus.plexus.interpolation.RegexBasedInterpolator;
 /**
  * Helper component for interpolating values.
  */
-@Named
 class InterpolatorUtils {
 
     private final Interpolator atInterpolator;
@@ -39,15 +36,14 @@ class InterpolatorUtils {
     /**
      * A default constructor.
      *
-     * @param mavenProject a MavenProject
+     * @param properties the properties of the project
      */
-    @Inject
-    InterpolatorUtils(MavenProject mavenProject) {
+    InterpolatorUtils(Map<String, String> properties) {
         atInterpolator = new RegexBasedInterpolator("[@\\$]\\{(.+?)", "}");
-        atInterpolator.addValueSource(new MapBasedValueSource(mavenProject.getProperties()));
+        atInterpolator.addValueSource(new MapBasedValueSource(properties));
     }
 
-    public String interpolateAtPattern(String value) throws MojoExecutionException {
+    public String interpolateAtPattern(String value) throws MojoException {
 
         if (value == null || !(value.contains("@{") || value.contains("${"))) {
             return value;
@@ -56,7 +52,7 @@ class InterpolatorUtils {
         try {
             return atInterpolator.interpolate(value);
         } catch (InterpolationException e) {
-            throw new MojoExecutionException(e.getMessage(), e);
+            throw new MojoException(e.getMessage(), e);
         }
     }
 }

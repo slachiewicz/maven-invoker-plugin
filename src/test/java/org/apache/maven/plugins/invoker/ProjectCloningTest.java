@@ -24,10 +24,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Properties;
 
-import org.apache.maven.project.MavenProject;
-import org.apache.maven.settings.Settings;
+import org.apache.maven.api.Project;
+import org.apache.maven.api.model.Model;
+import org.apache.maven.api.plugin.Log;
+import org.apache.maven.api.settings.Settings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,6 +40,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import static org.apache.maven.plugins.invoker.TestUtil.getBasedir;
 import static org.apache.maven.plugins.invoker.TestUtil.setVariableValueToObject;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests the cloning of IT projects into {@code cloneProjectsTo} and the filtering of their POMs.
@@ -51,7 +55,7 @@ class ProjectCloningTest {
     @TempDir
     Path tempDir;
 
-    private final InvokerMojo mojo = new InvokerMojo(null, null, null, null);
+    private final InvokerMojo mojo = new InvokerMojo();
 
     private File outerBasedir;
 
@@ -63,18 +67,20 @@ class ProjectCloningTest {
         cloneTo = tempDir.resolve("outer/target/it").toFile();
 
         // the project that configures the invoker plugin, its values feed the filtering of the cloned IT projects
-        MavenProject project = new MavenProject();
-        project.setGroupId("org.apache.maven.plugins.invoker");
-        project.setArtifactId("outer-project");
-        project.setVersion("1.0-SNAPSHOT");
-        project.setName("PASSED");
-        project.setFile(new File(outerBasedir, "pom.xml"));
-        project.getModel().getProperties().setProperty("propertyFromPropertiesSection", "PROPERTY-FROM-POM");
-        project.getModel().getProperties().setProperty("itProperty", "FAILED");
+        Model model = Model.newBuilder()
+                .groupId("org.apache.maven.plugins.invoker")
+                .artifactId("outer-project")
+                .version("1.0-SNAPSHOT")
+                .name("PASSED")
+                .properties(Map.of("propertyFromPropertiesSection", "PROPERTY-FROM-POM", "itProperty", "FAILED"))
+                .build();
+        Project project = TestUtil.project(model, new File(outerBasedir, "pom.xml").toPath());
 
-        Settings settings = new Settings();
-        settings.setLocalRepository(tempDir.resolve("local-repo").toString());
+        Settings settings = Settings.newBuilder()
+                .localRepository(tempDir.resolve("local-repo").toString())
+                .build();
 
+        setVariableValueToObject(mojo, "log", mock(Log.class));
         setVariableValueToObject(mojo, "project", project);
         setVariableValueToObject(mojo, "settings", settings);
         setVariableValueToObject(mojo, "cloneProjectsTo", cloneTo);

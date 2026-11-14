@@ -21,11 +21,13 @@ package org.apache.maven.plugins.invoker;
 import java.io.File;
 import java.nio.file.Path;
 
+import org.apache.maven.api.plugin.Log;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.apache.maven.plugins.invoker.TestUtil.setVariableValueToObject;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class InstallMojoTest {
 
@@ -36,7 +38,8 @@ class InstallMojoTest {
     void skipInstallationDoesNotCreateTheStagingRepository() throws Exception {
         File itRepo = tempDir.resolve("target/it-repo").toFile();
         // no project, session or repository system: a skipped installation must not touch any of them
-        InstallMojo mojo = new InstallMojo(null, null, null);
+        InstallMojo mojo = new InstallMojo();
+        setVariableValueToObject(mojo, "log", mock(Log.class));
         setVariableValueToObject(mojo, "localRepositoryPath", itRepo);
         setVariableValueToObject(mojo, "skipInstallation", true);
 

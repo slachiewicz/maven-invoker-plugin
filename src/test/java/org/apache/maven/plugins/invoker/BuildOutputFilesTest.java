@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import org.apache.maven.api.plugin.Log;
 import org.apache.maven.plugins.invoker.model.BuildJob;
 import org.codehaus.plexus.util.ReflectionUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ import org.w3c.dom.Element;
 
 import static org.apache.maven.plugins.invoker.TestUtil.setVariableValueToObject;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests the files the invoker writes next to or about a build: the build log and the JUnit report.
@@ -43,10 +45,11 @@ class BuildOutputFilesTest {
     @TempDir
     Path tempDir;
 
-    private final InvokerMojo mojo = new InvokerMojo(null, null, null, null);
+    private final InvokerMojo mojo = new InvokerMojo();
 
     @BeforeEach
     void setUp() throws Exception {
+        setVariableValueToObject(mojo, "log", mock(Log.class));
         setVariableValueToObject(
                 mojo, "projectsDirectory", tempDir.resolve("src/it").toFile());
     }

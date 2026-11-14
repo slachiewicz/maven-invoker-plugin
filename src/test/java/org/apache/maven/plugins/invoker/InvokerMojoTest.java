@@ -353,6 +353,7 @@ class InvokerMojoTest {
     @Test
     void skipInvocationReturnsBeforeAnythingIsRun(@TempDir Path tempDir) throws Exception {
         File reportsDirectory = tempDir.resolve("invoker-reports").toFile();
+        setVariableValueToObject(invokerMojo, "log", mock(Log.class));
         setVariableValueToObject(invokerMojo, "skipInvocation", true);
         setVariableValueToObject(invokerMojo, "reportsDirectory", reportsDirectory);
         setVariableValueToObject(invokerMojo, "projectsDirectory", new File(getBasedir(), "src/test/resources/unit"));
